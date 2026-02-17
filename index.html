@@ -2,105 +2,130 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Control Biométrico</title>
+<title>Control Biométrico Inteligente</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <style>
-body{font-family:Arial;margin:20px;background:#f4f6f8}
-button{padding:8px 14px;margin:4px;border:none;background:#1976d2;color:white;border-radius:6px;cursor:pointer}
+body{font-family:Segoe UI,Arial;margin:20px;background:#f4f6f8}
+h2{margin-bottom:5px}
+small{color:#555}
+button{padding:10px 16px;margin:6px;border:none;background:#1976d2;color:white;border-radius:8px;cursor:pointer;font-weight:600}
 button:hover{background:#125aa0}
 table{border-collapse:collapse;width:100%;margin-top:15px;background:white}
-th,td{border:1px solid #ccc;padding:6px;text-align:center}
+th,td{border:1px solid #ccc;padding:7px;text-align:center}
 th{background:#1976d2;color:white}
+.card{background:white;padding:14px;border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,.1);margin-bottom:15px}
 </style>
 </head>
 <body>
-<h2>Control Biométrico</h2>
-<input type="file" id="file" accept=".xlsx,.xls"><br><br>
-<button onclick="verMarcaciones()">Ver Marcaciones</button>
-<button onclick="resumen()">Resumen Tardanzas</button>
-<button onclick="exportar()">Exportar por Persona</button>
+<h2>Control Biométrico Automático</h2>
+<small>El sistema detecta correctamente múltiples marcaciones y calcula minutos no trabajados.</small>
+
+<div class="card">
+<input type="file" id="file" accept=".xlsx,.xls"><br>
+<button onclick="verMarcaciones()">📅 Ver días procesados</button>
+<button onclick="resumen()">📊 Resumen por persona</button>
+<button onclick="exportar()">⬇ Exportar Excel por trabajador</button>
+</div>
+
 <div id="tabla"></div>
 
 <script>
 let datos=[];
-const HORARIO_ENTRADA="07:30";
 
-function parseHoras(text){
- if(!text) return [];
- return text.toString().split(/\n|\r/).map(x=>x.trim()).filter(x=>/^\d{2}:\d{2}$/.test(x)).sort();
+// ---- UTILIDADES ----
+function limpiarHora(txt){
+ if(!txt) return null;
+ txt=txt.toString().trim();
+ const m=txt.match(/(\d{1,2}):(\d{2})(?::\d{2})?/);
+ if(!m) return null;
+ return String(m[1]).padStart(2,'0')+":"+m[2];
 }
 
-function minutosTarde(hora){
- if(!hora) return 0;
- const [h,m]=hora.split(":").map(Number);
- const ref=new Date(); ref.setHours(7,30,0,0);
- const ent=new Date(); ent.setHours(h,m,0,0);
- const diff=(ent-ref)/60000;
- return diff>0?Math.floor(diff):0;
-}
+function toMin(h){ if(!h) return null; const[a,b]=h.split(':'); return a*60+ +b; }
 
+function dentro(h,a,b){ if(h==null) return false; return h>=a && h<=b; }
+
+// ---- LECTURA ----
 document.getElementById('file').addEventListener('change',e=>{
  const reader=new FileReader();
  reader.onload=ev=>{
   const wb=XLSX.read(ev.target.result,{type:'binary'});
   const ws=wb.Sheets[wb.SheetNames[0]];
   datos=XLSX.utils.sheet_to_json(ws,{defval:""});
-  alert("Archivo cargado");
+  alert('Archivo cargado correctamente');
  };
  reader.readAsBinaryString(e.target.files[0]);
 });
 
+// ---- MOTOR DE ASISTENCIA ----
+function analizarDia(horasTxt){
+ let horas=horasTxt.split(/\n|\r/).map(limpiarHora).filter(x=>x).map(toMin).sort((a,b)=>a-b);
+ if(!horas.length) return null;
+
+ const ENTRADA = horas.filter(h=>dentro(h,390,510))[0]||null; //06:30-08:30
+ const SAL_ALM = horas.filter(h=>dentro(h,720,810)).slice(-1)[0]||null; //12:00-13:30
+ const ENT_ALM = horas.filter(h=>dentro(h,810,870) && (SAL_ALM==null||h>=SAL_ALM))[0]||null; //13:30-14:30
+ const SALIDA = horas.filter(h=>h>=870).slice(-1)[0]||null; //>=14:30
+
+ let perdida=0;
+
+ // tardanza
+ if(ENTRADA!=null && ENTRADA>450) perdida+=ENTRADA-450;
+
+ // mañana
+ if(SAL_ALM!=null && SAL_ALM<780) perdida+=780-SAL_ALM;
+
+ // tarde ingreso
+ if(ENT_ALM!=null && ENT_ALM>840) perdida+=ENT_ALM-840;
+
+ // salida temprana
+ if(SALIDA!=null && SALIDA<990) perdida+=990-SALIDA;
+
+ function fmt(m){ if(m==null) return ''; let h=Math.floor(m/60),mi=m%60; return String(h).padStart(2,'0')+":"+String(mi).padStart(2,'0'); }
+
+ return [fmt(ENTRADA),fmt(SAL_ALM),fmt(ENT_ALM),fmt(SALIDA),perdida];
+}
+
 function procesar(){
  let registros=[];
- if(datos.length===0) return registros;
- const columnas=Object.keys(datos[0]);
- const nombreCol=columnas[1];
-
+ if(datos.length==0) return registros;
+ const cols=Object.keys(datos[0]);
+ const nombreCol=cols[1];
  datos.forEach(row=>{
-  const nombre=row[nombreCol];
-  columnas.slice(3).forEach((col,i)=>{
-   const horas=parseHoras(row[col]);
-   if(!horas.length) return;
-   const entrada=horas[0]||"";
-   const salalm=horas[1]||"";
-   const entalm=horas[2]||"";
-   const salida=horas[3]||"";
-   const tarde=minutosTarde(entrada);
-   registros.push([nombre,i+1,entrada,salalm,entalm,salida,tarde]);
+  cols.slice(3).forEach((c,i)=>{
+   const r=analizarDia(row[c]);
+   if(r) registros.push([row[nombreCol],i+1,...r]);
   });
  });
  return registros;
 }
 
 function pintar(headers,rows){
- let html="<table><tr>"+headers.map(h=>`<th>${h}</th>`).join("")+"</tr>";
- rows.forEach(r=>html+="<tr>"+r.map(c=>`<td>${c}</td>`).join("")+"</tr>");
- html+="</table>";
+ let html='<table><tr>'+headers.map(h=>`<th>${h}</th>`).join('')+'</tr>';
+ rows.forEach(r=>html+='<tr>'+r.map(c=>`<td>${c}</td>`).join('')+'</tr>');
+ html+='</table>';
  document.getElementById('tabla').innerHTML=html;
 }
 
 function verMarcaciones(){
- const r=procesar();
- pintar(['Nombre','Dia','Entrada','Salida Alm','Entrada Alm','Salida','Min Tarde'],r);
+ pintar(['Nombre','Dia','Entrada','Salida Alm','Entrada Alm','Salida','Min no trabajados'],procesar());
 }
 
 function resumen(){
- const r=procesar();
- let total={};
- r.forEach(x=>{ total[x[0]]=(total[x[0]]||0)+x[6]; });
- const rows=Object.entries(total).sort().map(([k,v])=>[k,v]);
- pintar(['Nombre','Total minutos tarde'],rows);
+ let tot={};
+ procesar().forEach(r=>tot[r[0]]=(tot[r[0]]||0)+r[6]);
+ pintar(['Nombre','Total minutos'],Object.entries(tot));
 }
 
 function exportar(){
- const r=procesar();
+ let r=procesar();
  if(!r.length) return alert('No hay datos');
  let wb=XLSX.utils.book_new();
  let grupos={};
- r.forEach(x=>{ (grupos[x[0]]=grupos[x[0]]||[]).push(x); });
+ r.forEach(x=>(grupos[x[0]]=grupos[x[0]]||[]).push(x));
  Object.keys(grupos).forEach(nombre=>{
   let ws=XLSX.utils.aoa_to_sheet([
-   ['Nombre','Dia','Entrada','Salida Alm','Entrada Alm','Salida','Min Tarde'],
+   ['Nombre','Dia','Entrada','Salida Alm','Entrada Alm','Salida','Min no trabajados'],
    ...grupos[nombre]
   ]);
   XLSX.utils.book_append_sheet(wb,ws,nombre.substring(0,31));
