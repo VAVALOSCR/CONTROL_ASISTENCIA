@@ -144,14 +144,28 @@ function procesarFecha(ahora){
 }
 
 function calcularTurno(hoy){
-    let lunesActual=new Date(hoy);
-    lunesActual.setDate(hoy.getDate()-((hoy.getDay()+6)%7));
 
-    let semanas=Math.floor((lunesActual-fechaBase)/(1000*60*60*24*7));
-    let index=(semanas+1)%areas.length;
+    // obtener lunes de la semana actual
+    let lunesActual = new Date(hoy);
+    let dia = lunesActual.getDay();
+    let diferencia = (dia === 0 ? -6 : 1 - dia); // ajustar a lunes
+    lunesActual.setDate(lunesActual.getDate() + diferencia);
 
-    document.getElementById("turno").innerHTML=areas[index];
+    // lunes base donde fue DIRECCION
+    let lunesBase = new Date("2026-02-16");
+
+    // calcular cuántas semanas han pasado
+    let diff = lunesActual.getTime() - lunesBase.getTime();
+    let semanas = Math.floor(diff / (1000*60*60*24*7));
+
+    if(semanas < 0) semanas = 0;
+
+    // rotación exacta
+    let index = semanas % areas.length;
+
+    document.getElementById("turno").innerHTML = areas[index];
 }
+
 
 // COMUNICADOS
 function guardarComunicado(){
@@ -187,3 +201,4 @@ setInterval(obtenerHoraPeru,60000);
 
 </body>
 </html>
+
