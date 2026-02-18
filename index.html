@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -28,23 +29,18 @@ header{
     box-shadow:0px 4px 15px rgba(0,0,0,0.15);
 }
 .turno{
-    font-size:55px;
+    font-size:60px;
     color:#c40000;
     font-weight:bold;
 }
-.fecha{
-    font-size:24px;
-}
-textarea{
-    width:90%;
-    height:120px;
+.fecha{font-size:24px;}
+#proximo{
+    font-size:26px;
     margin-top:10px;
-    font-size:16px;
+    color:#003366;
 }
-input[type=password]{
-    padding:8px;
-    font-size:16px;
-}
+textarea{width:90%;height:120px;margin-top:10px;font-size:16px;}
+input[type=password]{padding:8px;font-size:16px;}
 button{
     padding:10px 20px;
     margin:10px;
@@ -65,8 +61,10 @@ button:hover{background:#0050a0;}
 }
 .oculto{display:none;}
 .tv textarea,.tv button,.tv #login{display:none;}
-.tv .turno{font-size:90px;}
+.tv .turno{font-size:100px;}
+.tv .fecha{font-size:40px;}
 </style>
+
 </head>
 
 <body>
@@ -77,6 +75,7 @@ button:hover{background:#0050a0;}
     <div class="fecha" id="fecha">Cargando fecha...</div>
     <h2>Responsable del Izamiento de Bandera</h2>
     <div class="turno" id="turno">Calculando...</div>
+    <div id="proximo"></div>
 </div>
 
 <div class="caja" id="login">
@@ -99,7 +98,7 @@ button:hover{background:#0050a0;}
 
 <script>
 
-// activar modo TV
+// modo TV
 if(location.search.includes("tv")){
     document.body.classList.add("tv");
 }
@@ -107,11 +106,10 @@ if(location.search.includes("tv")){
 // contraseña
 const PASSWORD="ugel03";
 
-// AREAS
+// áreas
 const areas=["DIRECCION","ADMINISTRACION","AGP","AGI"];
-const fechaBase=new Date("2026-02-16");
 
-// LOGIN
+// login
 function login(){
     let c=document.getElementById("clave").value;
     if(c===PASSWORD){
@@ -120,7 +118,7 @@ function login(){
     }else alert("Contraseña incorrecta");
 }
 
-// HORA PERU
+// hora Perú
 async function obtenerHoraPeru(){
     try{
         let r=await fetch("https://worldtimeapi.org/api/timezone/America/Lima",{cache:"no-store"});
@@ -145,33 +143,30 @@ function procesarFecha(ahora){
 
 function calcularTurno(hoy){
 
-    // obtener lunes de la semana actual
-    let lunesActual = new Date(hoy);
-    let dia = lunesActual.getDay();
-    let diferencia = (dia === 0 ? -6 : 1 - dia); // ajustar a lunes
-    lunesActual.setDate(lunesActual.getDate() + diferencia);
+    // lunes actual
+    let lunesActual=new Date(hoy);
+    let dia=lunesActual.getDay();
+    let diferencia=(dia===0?-6:1-dia);
+    lunesActual.setDate(lunesActual.getDate()+diferencia);
 
     // lunes base donde fue DIRECCION
-    let lunesBase = new Date("2026-02-16");
+    let lunesBase=new Date("2026-02-16");
 
-    // calcular cuántas semanas han pasado
-    let diff = lunesActual.getTime() - lunesBase.getTime();
-    let semanas = Math.floor(diff / (1000*60*60*24*7));
+    let diff=lunesActual-lunesBase;
+    let semanas=Math.floor(diff/(1000*60*60*24*7));
+    if(semanas<0)semanas=0;
 
-    if(semanas < 0) semanas = 0;
+    let index=semanas%areas.length;
+    document.getElementById("turno").innerHTML=areas[index];
 
-    // rotación exacta
-    let index = semanas % areas.length;
-
-    document.getElementById("turno").innerHTML = areas[index];
+    let siguiente=(index+1)%areas.length;
+    document.getElementById("proximo").innerHTML="Próximo lunes: <b>"+areas[siguiente]+"</b>";
 }
 
-
-// COMUNICADOS
+// comunicados
 function guardarComunicado(){
     let t=document.getElementById("mensaje").value.trim();
     if(!t)return;
-
     let lista=JSON.parse(localStorage.getItem("comunicados")||"[]");
     lista.unshift(t);
     localStorage.setItem("comunicados",JSON.stringify(lista));
@@ -201,4 +196,3 @@ setInterval(obtenerHoraPeru,60000);
 
 </body>
 </html>
-
